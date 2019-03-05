@@ -9,30 +9,37 @@ namespace JsonParser.Services
 {
     public class FastJsonParserService : IJsonParserService
     {
-        private delegate T ParseArrayItemAction<out T>(ref Utf8JsonReader reader);
-
-        private delegate void ParsePropertyAction<in T>(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName,
-            T parseProperty);
-
         public RootObject Parse(string json)
         {
             ReadOnlySpan<byte> jsonUtf8 = Encoding.UTF8.GetBytes(json);
             var reader = new Utf8JsonReader(jsonUtf8, true, default);
-            reader.Read();
-            return ParseObject<RootObject>(ref reader, ParseRootObjectProperty);
+            return ParseRootObject(ref reader);
         }
 
-        private static void ParseRootObjectProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName,
-            RootObject root)
+        private static RootObject ParseRootObject(ref Utf8JsonReader reader)
+        {
+            var root = new RootObject();
+
+            reader.Read();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var rootPropertyName = reader.ValueSpan;
+                reader.Read();
+                ParseRootObjectProperty(ref reader, rootPropertyName, root);
+            }
+            return root;
+        }
+
+        private static void ParseRootObjectProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName, RootObject root)
         {
             if (propertyName.SequenceEqual(PropertyNameBytes.BytesNextChangeId))
             {
-                reader.Read();
                 root.NextChangeId = reader.GetString();
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesStashes))
             {
-                root.Stashes = ParseNamedArray(ref reader, ParseStash);
+                root.Stashes = ParseStashArray(ref reader);
             }
             else
             {
@@ -40,9 +47,28 @@ namespace JsonParser.Services
             }
         }
 
+        private static List<Stash> ParseStashArray(ref Utf8JsonReader reader)
+        {
+            var stashes = new List<Stash>();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndArray)
+            {
+                stashes.Add(ParseStash(ref reader));
+            }
+
+            return stashes;
+        }
+
         private static Stash ParseStash(ref Utf8JsonReader reader)
         {
-            return ParseObject<Stash>(ref reader, ParseStashProperty);
+            var stash = new Stash();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var stashPropertyName = reader.ValueSpan;
+                ParseStashProperty(ref reader, stashPropertyName, stash);
+            }
+            return stash;
         }
 
         private static void ParseStashProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName, Stash stash)
@@ -77,7 +103,7 @@ namespace JsonParser.Services
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesItems))
             {
-                stash.Items = ParseNamedArray(ref reader, ParseItem);
+                stash.Items = ParseItemArray(ref reader);
             }
             else
             {
@@ -85,9 +111,27 @@ namespace JsonParser.Services
             }
         }
 
+        private static List<Item> ParseItemArray(ref Utf8JsonReader reader)
+        {
+            reader.Read();
+            var results = new List<Item>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                results.Add(ParseItem(ref reader));
+            }
+            return results;
+        }
+
         private static Item ParseItem(ref Utf8JsonReader reader)
         {
-            return ParseObject<Item>(ref reader, ParseItemProperty);
+            var item = new Item();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var itemPropertyName = reader.ValueSpan;
+                ParseItemProperty(ref reader, itemPropertyName, item);
+            }
+            return item;
         }
 
         private static void ParseItemProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName, Item item)
@@ -159,7 +203,7 @@ namespace JsonParser.Services
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesSockets))
             {
-                item.Sockets = ParseNamedArray(ref reader, ParseSocket);
+                item.Sockets = ParseSocketArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesName))
             {
@@ -188,43 +232,49 @@ namespace JsonParser.Services
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesProperties))
             {
-                item.Properties = ParseNamedArray(ref reader, ParseProperty);
+                item.Properties = ParsePropertyArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesAdditionalProperties))
             {
-                item.AdditionalProperties = ParseNamedArray(ref reader, ParseProperty);
+                item.AdditionalProperties = ParsePropertyArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesRequirements))
             {
-                item.Requirements = ParseNamedArray(ref reader, ParseProperty);
+                item.Requirements = ParsePropertyArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesNextLevelRequirements))
             {
-                item.NextLevelRequirements = ParseNamedArray(ref reader, ParseProperty);
+                item.NextLevelRequirements = ParsePropertyArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesExplicitMods))
             {
-                item.ExplicitMods = ParseNamedArray(ref reader, ParseStringOrNumber);
+                reader.Read();
+                item.ExplicitMods = ParseStringArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesImplicitMods))
             {
-                item.ImplicitMods = ParseNamedArray(ref reader, ParseStringOrNumber);
+                reader.Read();
+                item.ImplicitMods = ParseStringArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesUtilityMods))
             {
-                item.UtilityMods = ParseNamedArray(ref reader, ParseStringOrNumber);
+                reader.Read();
+                item.UtilityMods = ParseStringArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesCraftedMods))
             {
-                item.CraftedMods = ParseNamedArray(ref reader, ParseStringOrNumber);
+                reader.Read();
+                item.CraftedMods = ParseStringArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesEnchantMods))
             {
-                item.EnchantMods = ParseNamedArray(ref reader, ParseStringOrNumber);
+                reader.Read();
+                item.EnchantMods = ParseStringArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesFlavourText))
             {
-                item.FlavourText = ParseNamedArray(ref reader, ParseStringOrNumber);
+                reader.Read();
+                item.FlavourText = ParseStringArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesProphecyText))
             {
@@ -261,13 +311,30 @@ namespace JsonParser.Services
             }
         }
 
-        private static Socket ParseSocket(ref Utf8JsonReader reader)
+        private static List<Socket> ParseSocketArray(ref Utf8JsonReader reader)
         {
-            return ParseObject<Socket>(ref reader, ParseSocketProperty);
+            reader.Read();
+            var results = new List<Socket>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                results.Add(ParseSocket(ref reader));
+            }
+            return results;
         }
 
-        private static void ParseSocketProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName,
-            Socket socket)
+        private static Socket ParseSocket(ref Utf8JsonReader reader)
+        {
+            var socket = new Socket();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var propertyName = reader.ValueSpan;
+                ParseSocketProperty(ref reader, propertyName, socket);
+            }
+            return socket;
+        }
+
+        private static void ParseSocketProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName, Socket socket)
         {
             if (propertyName.SequenceEqual(PropertyNameBytes.BytesAttr))
             {
@@ -290,13 +357,30 @@ namespace JsonParser.Services
             }
         }
 
-        private static Property ParseProperty(ref Utf8JsonReader reader)
+        private static List<Property> ParsePropertyArray(ref Utf8JsonReader reader)
         {
-            return ParseObject<Property>(ref reader, ParsePropertyProperty);
+            reader.Read();
+            var results = new List<Property>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                results.Add(ParseProperty(ref reader));
+            }
+            return results;
         }
 
-        private static void ParsePropertyProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName,
-            Property property)
+        private static Property ParseProperty(ref Utf8JsonReader reader)
+        {
+            var property = new Property();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var propertyName = reader.ValueSpan;
+                ParsePropertyProperty(ref reader, propertyName, property);
+            }
+            return property;
+        }
+
+        private static void ParsePropertyProperty(ref Utf8JsonReader reader, ReadOnlySpan<byte> propertyName, Property property)
         {
             if (propertyName.SequenceEqual(PropertyNameBytes.BytesDisplayMode))
             {
@@ -310,7 +394,7 @@ namespace JsonParser.Services
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesValues))
             {
-                property.Values = ParseNamedArray(ref reader, ParseStringArray);
+                property.Values = ParseStringArrayArray(ref reader);
             }
             else if (propertyName.SequenceEqual(PropertyNameBytes.BytesType))
             {
@@ -323,68 +407,45 @@ namespace JsonParser.Services
             }
         }
 
-        private static List<string> ParseStringArray(ref Utf8JsonReader reader)
+        private static List<List<string>> ParseStringArrayArray(ref Utf8JsonReader reader)
         {
-            var results = new List<string>();
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            reader.Read();
+            var results = new List<List<string>>();
+            while (reader.Read()
+                   && reader.TokenType != JsonTokenType.EndArray)
             {
-                results.Add(ParseStringOrNumber(ref reader));
+                results.Add(ParseStringArray(ref reader));
             }
-
             return results;
         }
 
-        private static string ParseStringOrNumber(ref Utf8JsonReader reader)
+        private static List<string> ParseStringArray(ref Utf8JsonReader reader)
         {
-            return reader.TokenType == JsonTokenType.String
-                ? reader.GetString()
-                : reader.GetInt32().ToString();
+            var results = new List<string>();
+            reader.Read();
+            while (reader.TokenType != JsonTokenType.EndArray)
+            {
+                var result = reader.TokenType == JsonTokenType.String
+                    ? reader.GetString()
+                    : reader.GetInt32().ToString();
+                results.Add(result);
+                reader.Read();
+            }
+            return results;
         }
 
         private static Category ParseCategory(ref Utf8JsonReader reader)
         {
             var category = new Category();
-
             while (reader.Read()
                    && reader.TokenType != JsonTokenType.EndObject)
             {
                 reader.Read();
                 category.Name = reader.GetString();
                 reader.Read();
-                category.Values = ParseUnnamedArray(ref reader, ParseStringOrNumber);
+                category.Values = ParseStringArray(ref reader);
             }
-
             return category;
-        }
-
-        private static List<T> ParseNamedArray<T>(ref Utf8JsonReader reader, ParseArrayItemAction<T> parseArrayItem)
-        {
-            reader.Read();
-            return ParseUnnamedArray(ref reader, parseArrayItem);
-        }
-
-        private static List<T> ParseUnnamedArray<T>(ref Utf8JsonReader reader, ParseArrayItemAction<T> parseArrayItem)
-        {
-            var results = new List<T>();
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-            {
-                results.Add(parseArrayItem(ref reader));
-            }
-
-            return results;
-        }
-
-        private static T ParseObject<T>(ref Utf8JsonReader reader, ParsePropertyAction<T> parseProperty) where T : new()
-        {
-            var obj = new T();
-
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-            {
-                var propertyName = reader.ValueSpan;
-                parseProperty(ref reader, propertyName, obj);
-            }
-
-            return obj;
         }
 
         private static void Skip(ref Utf8JsonReader reader)
@@ -398,9 +459,7 @@ namespace JsonParser.Services
                 || reader.TokenType == JsonTokenType.StartArray)
             {
                 var depth = reader.CurrentDepth;
-                while (reader.Read() && depth <= reader.CurrentDepth)
-                {
-                }
+                while (reader.Read() && depth <= reader.CurrentDepth) { }
             }
         }
     }
